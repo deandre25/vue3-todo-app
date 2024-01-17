@@ -1,49 +1,73 @@
 <script>
+import { getTodos, createTodo, updateTodo, deleteTodo } from './api/todos'
+import Message from './components/Message.vue';
 import StatusFilter from './components/StatusFilter.vue';
-import todos from './api/todos';
 import TodoItem from './components/TodoItem.vue';
 
 export default {
   components: {
     StatusFilter,
-    TodoItem
+    TodoItem,
+    Message
 },
   data() {
-    let todos = [];
-    const jsonData = localStorage.getItem('todos') || '[]';
-
-    try {
-      todos = JSON.parse(jsonData);
-    } catch (e) { }
-
     return {
-      todos,
+      todos: [],
       title: '',
       status: 'all',
+      errorMessage: '',
     }
   },
   computed: {
     activeTodos() {
       return this.todos.filter(todo => !todo.completed);
     },
-  },
-  watch: {
-    todos: {
-      deep: true,
-      handler() {
-        localStorage.setItem('todos', JSON.stringify(this.todos));
-      },
+    completedTodos() {
+      return this.todos.filter(todo => todo.completed);
+    },
+    visibleTodos() {
+      switch (this.status) {
+        case 'active':
+          return this.activeTodos;
+          
+        case 'completed':
+          return  this.completedTodos;
+        
+        default:
+          return this.todos;
+      }
     }
+  },
+  mounted() {
+    getTodos()
+      .then(({data}) => {
+        this.todos = data;
+      })
+      .catch(() => {
+        this.$refs.errorMessage.show('Unable to load todos');
+      });
   },
   methods: {
     handleSubmit() {
-      this.todos.push({
-        id: Date.now(),
-        title: this.title,
-        completed: false,
-      });
-
-      this.title = '';
+      createTodo(this.title)
+        .then(({data}) => {
+          this.todos = [...this.todos, data];
+          this.title = '';
+        });
+    },
+    updateTodo({ id, title, completed }) {
+      updateTodo({ id, title, completed })
+        .then(({data}) => {
+          this.todos = this.todos.map(
+            todo => todo.id !== id ? todo : data
+          );
+        })
+    },
+    deleteTodo(todoId) {
+      deleteTodo(todoId)
+        .then(() => {
+          this.todos = this.todos.filter(todo => todo.id !== todoId);
+        })
     }
   }
 }
@@ -62,15 +86,15 @@ export default {
         </form>
       </header>
 
-      <section class="todoapp__main">
+      <TransitionGroup name="list" tag="section" class="todoapp__main">
         <TodoItem 
-          v-for="todo, index of todos" 
+          v-for="todo, index of visibleTodos" 
           v-bind:key="todo.id"
           :todo="todo"
-          @update="todos[index] = $event"
-          @delete="todos.splice(index, 1)"
+          @update="updateTodo"
+          @delete="deleteTodo(todo.id)"
         />
-      </section>
+      </TransitionGroup>
 
       <footer class="todoapp__footer">
         <span class="todo-count">
@@ -87,17 +111,32 @@ export default {
       </footer>
     </div>
 
-    <article class="message is-danger message--hidden">
-      <div class="message-header">
-        <p>Error</p>
-        <button class="delete"></button>
-      </div>
+    <Message 
+      class="is-warning" 
+      ref="errorMessage"
+    >
+      <template #default="{text}">
+        <p>{{text}}</p>
+        <button class="delete" @click="$refs.errorMessage.hide()">x</button>
+      </template>
 
-      <div class="message-body">
-        Unable to app a Todo
-      </div>
-    </article>
+      <template #header>
+			  <p>Server Error</p>
+      </template>
+    </Message>
   </div>
 </template>
 
-<style></style>
+<style>
+.list-enter-active,
+.list-leave-active {
+  max-height: 60px;
+  transition: all 0.5s ease;
+}
+.list-enter-from,
+.list-leave-to {
+  opacity: 0;
+  max-height: 0;
+  transform: scaleY(0);
+}
+</style>
