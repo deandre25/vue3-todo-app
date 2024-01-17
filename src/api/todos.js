@@ -4,7 +4,6 @@ import {
 
 export const getTodos = () => {
   return client.get('/todos?userId=6342')
-    .then(() => Promise.reject())
 };
 
 export const createTodo = (title) => {
